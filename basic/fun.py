@@ -27,7 +27,6 @@ def cheeseshop(kind: str, *arguments, **keywords) -> None:
     print("-" * 40)
     for kw in keywords:
         print(kw, ":", keywords[kw])
-    return "jingb"
 
 ret = cheeseshop("Limburger", "It's very runny, sir.",
            "It's really very, VERY runny, sir.",
