@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSE 增量流式响应测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .output-section {
+            margin-top: 20px;
+        }
+        .field-container {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .field-label {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        .field-content {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            min-height: 20px;
+            white-space: pre-wrap;
+        }
+        .title-content {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .summary-content {
+            color: #007bff;
+        }
+        .status-log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin: 5px 0;
+            font-weight: bold;
+        }
+        .status.start { background-color: #d4edda; color: #155724; }
+        .status.chunk { background-color: #d1ecf1; color: #0c5460; }
+        .status.end { background-color: #d4edda; color: #155724; }
+        .status.error { background-color: #f8d7da; color: #721c24; }
+        .status.info { background-color: #e2e3e5; color: #383d41; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SSE 增量流式响应测试</h1>
+        <p>点击下面的按钮开始接收来自大模型的增量流式响应：</p>
+        
+        <button id="startBtn" onclick="startSSE()">开始接收流式响应</button>
+        <button id="stopBtn" onclick="stopSSE()" disabled>停止接收</button>
+        <button onclick="clearOutput()">清空输出</button>
+        
+        <div class="output-section">
+            <div class="field-container">
+                <div class="field-label">📝 标题 (Title):</div>
+                <div id="titleContent" class="field-content title-content"></div>
+            </div>
+            
+            <div class="field-container">
+                <div class="field-label">📄 摘要 (Summary):</div>
+                <div id="summaryContent" class="field-content summary-content"></div>
+            </div>
+        </div>
+        
+        <div class="status-log" id="statusLog">
+            <div class="field-label">📊 状态日志:</div>
+        </div>
+    </div>
+
+    <script>
+        let eventSource = null;
+        let titleContent = "";
+        let summaryContent = "";
+
+        function startSSE() {
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            
+            // 清空输出
+            clearOutput();
+            
+            // 禁用开始按钮，启用停止按钮
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            
+            // 创建 EventSource 连接
+            eventSource = new EventSource('http://localhost:5001/helloworld');
+            
+            // 监听消息
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    displayMessage(data);
+                } catch (e) {
+                    console.error('解析消息失败:', e);
+                    displayMessage({ status: 'error', message: '消息解析失败: ' + event.data });
+                }
+            };
+            
+            // 监听连接打开
+            eventSource.onopen = function(event) {
+                console.log('SSE 连接已建立');
+                displayMessage({ status: 'info', message: 'SSE 连接已建立' });
+            };
+            
+            // 监听错误
+            eventSource.onerror = function(event) {
+                console.error('SSE 连接错误:', event);
+                displayMessage({ status: 'error', message: 'SSE 连接错误' });
+                stopSSE();
+            };
+        }
+        
+        function stopSSE() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+            
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            
+            displayMessage({ status: 'info', message: 'SSE 连接已关闭' });
+        }
+        
+        function displayMessage(data) {
+            const statusLog = document.getElementById('statusLog');
+            const timestamp = new Date().toLocaleTimeString();
+            
+            let message = `[${timestamp}] `;
+            
+            switch(data.status) {
+                case 'start':
+                    message += `🚀 ${data.message}`;
+                    break;
+                case 'chunk':
+                    // 处理增量数据
+                    if (data.data) {
+                        if (data.data.title !== undefined) {
+                            titleContent += data.data.title;
+                            document.getElementById('titleContent').textContent = titleContent;
+                            message += `📝 标题增量: "${data.data.title}"`;
+                        }
+                        if (data.data.summary !== undefined) {
+                            summaryContent += data.data.summary;
+                            document.getElementById('summaryContent').textContent = summaryContent;
+                            message += `📄 摘要增量: "${data.data.summary}"`;
+                        }
+                    }
+                    break;
+                case 'end':
+                    message += `✅ ${data.message}`;
+                    break;
+                case 'error':
+                    message += `❌ 错误: ${data.message}`;
+                    break;
+                case 'info':
+                    message += `ℹ️ ${data.message}`;
+                    break;
+                default:
+                    message += `❓ 未知状态: ${JSON.stringify(data)}`;
+            }
+            
+            // 添加到状态日志
+            const logEntry = document.createElement('div');
+            logEntry.textContent = message;
+            statusLog.appendChild(logEntry);
+            statusLog.scrollTop = statusLog.scrollHeight;
+        }
+        
+        function clearOutput() {
+            titleContent = "";
+            summaryContent = "";
+            document.getElementById('titleContent').textContent = "";
+            document.getElementById('summaryContent').textContent = "";
+            document.getElementById('statusLog').innerHTML = '<div class="field-label">📊 状态日志:</div>';
+        }
+        
+        // 页面卸载时关闭连接
+        window.onbeforeunload = function() {
+            if (eventSource) {
+                eventSource.close();
+            }
+        };
+    </script>
+</body>
+</html> 

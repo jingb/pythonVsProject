@@ -1,2 +1,8 @@
 quart>=0.18.4
-quart-restx>=0.4.0 
+quart-restx>=0.4.0
+requests>=2.31.0
+langchain>=0.1.0
+langchain-openai>=0.1.0
+openai>=1.0.0
+flask>=2.3.0
+flask-cors>=4.0.0 
