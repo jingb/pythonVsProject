@@ -99,7 +99,7 @@ class Result(Generic[T]):
         """
         # 如果没有提供详细错误信息，使用错误码的默认描述
         if error_message is None:
-            error_message = error_code.get_message()
+            error_message = error_code.desc
         
         return cls(
             success=False,
@@ -121,7 +121,7 @@ class Result(Generic[T]):
         if self.error_code is None:
             return False
         
-        return self.error_code.is_retryable()
+        return self.error_code.retryable
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典（用于序列化）
@@ -139,7 +139,7 @@ class Result(Generic[T]):
         # 失败时的字段
         else:
             if self.error_code:
-                result_dict["error_code"] = self.error_code.get_code()
+                result_dict["error_code"] = self.error_code.code
             result_dict["error_message"] = self.error_message
             result_dict["retryable"] = self.is_retryable()
         
@@ -161,31 +161,8 @@ class Result(Generic[T]):
         if self.error_code is None:
             return 500
         
-        # 错误码到 HTTP 状态码的映射
-        mapping = {
-            # 输入错误 -> 400
-            ErrorCode.INVALID_INPUT: 400,
-            ErrorCode.VALIDATION_FAILED: 400,
-            ErrorCode.MISSING_REQUIRED: 400,
-            
-            # 认证错误 -> 401/403
-            ErrorCode.AUTH_FAILED: 401,
-            ErrorCode.CREDENTIALS_INVALID: 401,
-            ErrorCode.PERMISSION_DENIED: 403,
-            
-            # 限流 -> 429
-            ErrorCode.RATE_LIMITED: 429,
-            ErrorCode.QUOTA_EXCEEDED: 429,
-            
-            # 超时 -> 504
-            ErrorCode.TIMEOUT: 504,
-            
-            # 服务不可用 -> 503
-            ErrorCode.SERVICE_UNAVAILABLE: 503,
-            ErrorCode.SERVICE_DEGRADED: 503,
-        }
-        
-        return mapping.get(self.error_code, 500)
+        # 委托给错误码的 to_http_status() 方法
+        return self.error_code.to_http_status()
     
     def __bool__(self) -> bool:
         """支持布尔判断
@@ -211,7 +188,7 @@ class Result(Generic[T]):
         else:
             return (
                 f"Result(success=False, "
-                f"error_code={self.error_code.get_code() if self.error_code else None}, "
+                f"error_code={self.error_code.code if self.error_code else None}, "
                 f"error_message={self.error_message})"
             )
 

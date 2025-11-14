@@ -17,9 +17,9 @@ V2 改进：
 from .service import PhoneLocationService
 from .result import Result
 from .models import PhoneLocation, CarrierType
-from .error_types import ErrorCode, ErrorType
+from .error_types import ErrorCode
 
-__version__ = "2.0.0"
+__version__ = "2.3.0"
 
 __all__ = [
     # 服务
@@ -34,6 +34,5 @@ __all__ = [
     
     # 错误类型
     "ErrorCode",
-    "ErrorType",
 ]
 

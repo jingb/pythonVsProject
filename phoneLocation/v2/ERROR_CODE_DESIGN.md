@@ -17,9 +17,8 @@
 ```
 错误类型
 ├── 输入错误（调用方问题）
-│   ├── INVALID_INPUT          # 输入参数不合法
-│   ├── VALIDATION_FAILED      # 参数校验失败
-│   └── MISSING_REQUIRED       # 缺少必需参数
+│   ├── INVALID_PARAMETER      # 参数不合法（包括格式、类型、值等）
+│   └── MISSING_PARAMETER      # 缺少必需参数
 │
 ├── 认证授权错误
 │   ├── AUTH_FAILED            # 认证失败
@@ -28,17 +27,14 @@
 │
 ├── 资源限制错误（可重试）
 │   ├── RATE_LIMITED           # 请求频率超限
-│   ├── QUOTA_EXCEEDED         # 配额耗尽
-│   └── RESOURCE_EXHAUSTED     # 资源耗尽
+│   └── QUOTA_EXCEEDED         # 配额耗尽
 │
 ├── 超时错误（可重试）
-│   ├── TIMEOUT                # 请求超时
-│   └── DEADLINE_EXCEEDED      # 截止时间已过
+│   └── TIMEOUT                # 请求超时
 │
 └── 服务状态错误（可重试）
     ├── SERVICE_UNAVAILABLE    # 服务不可用
-    ├── SERVICE_DEGRADED       # 服务降级
-    └── MAINTENANCE            # 维护中
+    └── PARTIAL_FAILURE        # 部分功能不可用
 ```
 
 ---
@@ -47,81 +43,101 @@
 
 ```python
 from enum import Enum
-from dataclasses import dataclass
-
-@dataclass(frozen=True)
-class ErrorType:
-    """错误类型（包含码和描述）"""
-    code: str         # 错误码（字符串常量）
-    message: str      # 错误描述
-    retryable: bool   # 是否可重试
 
 class ErrorCode(Enum):
-    """通用错误码枚举"""
+    """通用错误码枚举
+    
+    每个错误码包含三个属性：
+    - code: 错误码字符串
+    - message: 错误描述
+    - retryable: 是否可重试
+    """
+    
+    def __init__(self, code: str, message: str, retryable: bool):
+        self._code = code
+        self._message = message
+        self._retryable = retryable
     
     # ==================== 输入错误（调用方问题，不可重试）====================
     
-    INVALID_INPUT = ErrorType(
-        code="INVALID_INPUT",
-        message="输入参数不合法",
-        retryable=False
+    INVALID_PARAMETER = (
+        "INVALID_PARAMETER",
+        "参数不合法（包括格式错误、类型错误、值不合理等）",
+        False
     )
+    
+    MISSING_PARAMETER = (
+        "MISSING_PARAMETER",
+        "缺少必需参数",
+        False
+    )
+    
+    # ==================== 属性访问 ====================
+    
+    @property
+    def code(self) -> str:
+        """错误码字符串"""
+        return self._code
+    
+    @property
+    def message(self) -> str:
+        """错误描述"""
+        return self._message
+    
+    @property
+    def retryable(self) -> bool:
+        """是否可重试"""
+        return self._retryable
     
     # ==================== 认证授权错误（不可重试）====================
     
-    AUTH_FAILED = ErrorType(
-        code="AUTH_FAILED",
-        message="认证失败",
-        retryable=False
-    )
-    
-    PERMISSION_DENIED = ErrorType(
-        code="PERMISSION_DENIED",
-        message="权限不足",
-        retryable=False
-    )
-    
-    CREDENTIALS_INVALID = ErrorType(
-        code="CREDENTIALS_INVALID",
-        message="凭证无效",
-        retryable=False
-    )
+    AUTH_FAILED = ("AUTH_FAILED", "认证失败", False)
+    PERMISSION_DENIED = ("PERMISSION_DENIED", "权限不足", False)
+    CREDENTIALS_INVALID = ("CREDENTIALS_INVALID", "凭证无效", False)
     
     # ==================== 资源限制错误（可重试）====================
     
-    RATE_LIMITED = ErrorType(
-        code="RATE_LIMITED",
-        message="请求频率超限",
-        retryable=True
-    )
-    
-    QUOTA_EXCEEDED = ErrorType(
-        code="QUOTA_EXCEEDED",
-        message="配额耗尽",
-        retryable=True
-    )
+    RATE_LIMITED = ("RATE_LIMITED", "请求频率超限", True)
+    QUOTA_EXCEEDED = ("QUOTA_EXCEEDED", "配额耗尽", True)
     
     # ==================== 超时错误（可重试）====================
     
-    TIMEOUT = ErrorType(
-        code="TIMEOUT",
-        message="请求超时",
-        retryable=True
-    )
+    TIMEOUT = ("TIMEOUT", "请求超时", True)
     
     # ==================== 服务状态错误（可重试）====================
     
-    SERVICE_UNAVAILABLE = ErrorType(
-        code="SERVICE_UNAVAILABLE",
-        message="服务不可用",
-        retryable=True
-    )
+    SERVICE_UNAVAILABLE = ("SERVICE_UNAVAILABLE", "服务不可用", True)
+    PARTIAL_FAILURE = ("PARTIAL_FAILURE", "部分功能不可用，无法返回完整数据", True)
     
-    SERVICE_DEGRADED = ErrorType(
-        code="SERVICE_DEGRADED",
-        message="服务降级，既效果会差些或者部分字段缺失，调用端自己识别结果是否可用",
-        retryable=True
-    )
+    # ==================== 方法 ====================
+    
+    def to_http_status(self) -> int:
+        """转换为 HTTP 状态码（仅用于 HTTP 接口）
+        
+        Returns:
+            int: HTTP 状态码
+        """
+        mapping = {
+            ErrorCode.INVALID_PARAMETER: 400,
+            ErrorCode.MISSING_PARAMETER: 400,
+            ErrorCode.AUTH_FAILED: 401,
+            ErrorCode.CREDENTIALS_INVALID: 401,
+            ErrorCode.PERMISSION_DENIED: 403,
+            ErrorCode.RATE_LIMITED: 429,
+            ErrorCode.QUOTA_EXCEEDED: 429,
+            ErrorCode.TIMEOUT: 504,
+            ErrorCode.SERVICE_UNAVAILABLE: 503,
+            ErrorCode.PARTIAL_FAILURE: 503,
+        }
+        return mapping.get(self, 500)
+    
+    @classmethod
+    def from_code(cls, code: str) -> 'ErrorCode':
+        """根据错误码字符串获取枚举值"""
+        for error in cls:
+            if error.code == code:
+                return error
+        raise ValueError(f"Unknown error code: {code}")
     
 ```
 
@@ -136,13 +152,13 @@ def query(self, phone_number: str) -> QueryResult:
     # 参数校验
     if not phone_number:
         return QueryResult.error(
-            error_code=ErrorCode.MISSING_REQUIRED,
+            error_code=ErrorCode.MISSING_PARAMETER,
             error_message="phone_number 参数为空"
         )
     
     if not self._validate_phone_format(phone_number):
         return QueryResult.error(
-            error_code=ErrorCode.VALIDATION_FAILED,
+            error_code=ErrorCode.INVALID_PARAMETER,
             error_message=f"手机号格式不正确: {phone_number}"
         )
     
@@ -187,70 +203,42 @@ if result.success:
 else:
     # 方式1：精确判断错误类型
     if result.error_code == ErrorCode.RATE_LIMITED:
-        print(f"被限流，{result.retry_after} 秒后重试")
-        time.sleep(result.retry_after)
+        retry_after = result.metadata.get("retry_after", 60)
+        print(f"被限流，{retry_after} 秒后重试")
+        time.sleep(retry_after)
         # 重试
-    elif result.error_code == ErrorCode.VALIDATION_FAILED:
+    elif result.error_code == ErrorCode.INVALID_PARAMETER:
         print(f"参数错误: {result.error_message}")
         # 修正参数
     
     # 方式2：根据 retryable 判断
-    if result.error_code.value.retryable:
+    if result.error_code.retryable:
         print("这是临时错误，可以重试")
     else:
         print("这是永久错误，不应重试")
     
-    # 方式3：获取错误码字符串（用于日志、监控等）
-    error_code_str = result.error_code.value.code
-    print(f"错误码: {error_code_str}")
+    # 方式3：获取错误信息
+    print(f"错误码: {result.error_code.code}")
+    print(f"错误描述: {result.error_code.desc}")
+    print(f"HTTP状态码: {result.error_code.to_http_status()}")
 ```
 
-### 映射到 HTTP 状态码（可选）
+### 映射到 HTTP 状态码
 
-如果需要暴露为 HTTP API，可以提供映射函数：
+ErrorCode 内置了 `to_http_status()` 方法，可以直接转换为 HTTP 状态码：
 
 ```python
-def error_code_to_http_status(error_code: ErrorCode) -> int:
-    """将错误码映射到 HTTP 状态码（仅用于 HTTP 接口）"""
-    mapping = {
-        # 输入错误 -> 400
-        ErrorCode.INVALID_INPUT: 400,
-        ErrorCode.VALIDATION_FAILED: 400,
-        ErrorCode.MISSING_REQUIRED: 400,
-        
-        # 认证错误 -> 401/403
-        ErrorCode.AUTH_FAILED: 401,
-        ErrorCode.CREDENTIALS_INVALID: 401,
-        ErrorCode.PERMISSION_DENIED: 403,
-        
-        # 限流 -> 429
-        ErrorCode.RATE_LIMITED: 429,
-        ErrorCode.QUOTA_EXCEEDED: 429,
-        ErrorCode.RESOURCE_EXHAUSTED: 429,
-        
-        # 超时 -> 504
-        ErrorCode.TIMEOUT: 504,
-        ErrorCode.DEADLINE_EXCEEDED: 504,
-        
-        # 服务不可用 -> 503
-        ErrorCode.SERVICE_UNAVAILABLE: 503,
-        ErrorCode.SERVICE_DEGRADED: 503,
-        ErrorCode.MAINTENANCE: 503,
-    }
-    return mapping.get(error_code, 500)
+# 直接使用
+error = ErrorCode.RATE_LIMITED
+http_status = error.to_http_status()  # 429
 
-# HTTP 接口使用
+# 在 HTTP 接口中使用
 @app.post("/api/query")
 def query_api():
     result = service.query(request.json["phone"])
     
-    return jsonify({
-        "success": result.success,
-        "data": result.data.__dict__ if result.data else None,
-        "error_code": result.error_code.value.code if result.error_code else None,
-        "error_message": result.error_message,
-        "retryable": result.error_code.value.retryable if result.error_code else False,
-    }), error_code_to_http_status(result.error_code) if not result.success else 200
+    # Result 类的 to_http_status() 会委托给 ErrorCode.to_http_status()
+    return jsonify(result.to_dict()), result.to_http_status()
 ```
 
 ### 映射到 gRPC Status Code（可选）
@@ -279,14 +267,15 @@ def error_code_to_grpc_status(error_code: ErrorCode) -> grpc.StatusCode:
 
 | PhoneLocation 场景 | 使用的通用错误码 |
 |------------------|----------------|
-| 手机号格式错误 | `VALIDATION_FAILED` |
-| 手机号为空 | `MISSING_REQUIRED` |
-| timeout 参数不合法 | `INVALID_INPUT` |
+| 手机号格式错误 | `INVALID_PARAMETER` |
+| 手机号为空 | `MISSING_PARAMETER` |
+| timeout 参数不合法 | `INVALID_PARAMETER` |
 | API密钥错误 | `CREDENTIALS_INVALID` |
 | 权限不足/账户欠费 | `PERMISSION_DENIED` |
 | 请求过于频繁 | `RATE_LIMITED` |
 | 请求超时 | `TIMEOUT` |
 | 远程服务不可用 | `SERVICE_UNAVAILABLE` |
+| 部分数据不可用 | `PARTIAL_FAILURE` |
 
 ---
 
@@ -314,46 +303,30 @@ def error_code_to_grpc_status(error_code: ErrorCode) -> grpc.StatusCode:
 
 ---
 
-## 问题讨论
+## 总结
 
-### 1. 错误码粒度是否合适？
+当前错误码设计包含 **9 个通用错误码**，分为 5 大类：
 
-当前设计了 13 个通用错误码，是否需要：
-- 更粗粒度？（例如合并 `TIMEOUT` 和 `DEADLINE_EXCEEDED`）
-- 更细粒度？（例如区分不同类型的参数错误）
+| 分类 | 错误码 | 数量 |
+|------|--------|------|
+| 输入错误 | INVALID_PARAMETER, MISSING_PARAMETER | 2 |
+| 认证错误 | AUTH_FAILED, PERMISSION_DENIED, CREDENTIALS_INVALID | 3 |
+| 资源限制 | RATE_LIMITED, QUOTA_EXCEEDED | 2 |
+| 超时错误 | TIMEOUT | 1 |
+| 服务状态 | SERVICE_UNAVAILABLE, PARTIAL_FAILURE | 2 |
 
-### 2. 是否需要错误码分组？
-
-例如：
-```python
-class InputErrorCode(Enum):
-    INVALID_INPUT = ...
-    VALIDATION_FAILED = ...
-
-class AuthErrorCode(Enum):
-    AUTH_FAILED = ...
-    PERMISSION_DENIED = ...
-```
-
-还是统一在一个 `ErrorCode` 枚举中？
-
-### 3. ErrorType 的设计是否合适？
-
-当前设计：
-```python
-@dataclass(frozen=True)
-class ErrorType:
-    code: str
-    message: str
-    retryable: bool
-```
-
-是否需要添加其他字段？例如：
-- `category`: 错误分类（input/auth/resource/timeout/service）
-- `severity`: 严重程度（error/warning）
-- `http_status`: 默认的 HTTP 状态码
+**设计原则**：
+- ✅ 通用性：不绑定具体业务
+- ✅ 协议无关：不使用 HTTP 状态码
+- ✅ 语义清晰：使用字符串常量
+- ✅ 结构化：包含码、描述、可重试标志
+- ✅ 易于扩展：添加新错误类型简单
 
 ---
 
-请告诉我你的想法，我会据此实现完整的代码！
+**版本**: V2.3.0  
+**最后更新**: 2024-11-12  
+**重要变更**: 
+- V2.3.0: HTTP 状态码映射移至 ErrorCode.to_http_status()
+- V2.2.0: 合并 ErrorType 和 ErrorCode 为单一枚举类
 

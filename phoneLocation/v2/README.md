@@ -89,9 +89,8 @@ class Result(Generic[T]):
 ```python
 class ErrorCode(Enum):
     # 输入错误（不可重试）
-    INVALID_INPUT         # 输入参数不合法
-    VALIDATION_FAILED     # 参数校验失败
-    MISSING_REQUIRED      # 缺少必需参数
+    INVALID_PARAMETER     # 参数不合法（包括格式、类型、值等）
+    MISSING_PARAMETER     # 缺少必需参数
     
     # 认证错误（不可重试）
     AUTH_FAILED           # 认证失败
@@ -107,7 +106,7 @@ class ErrorCode(Enum):
     
     # 服务状态（可重试）
     SERVICE_UNAVAILABLE   # 服务不可用
-    SERVICE_DEGRADED      # 服务降级
+    PARTIAL_FAILURE       # 部分功能不可用
 ```
 
 ---
@@ -266,7 +265,7 @@ http_status = result.to_http_status()  # 200, 400, 429, 503...
 
 | 组件 | 状态 | 说明 |
 |-----|------|------|
-| **错误码** | ✅ 完成 | ErrorCode 枚举（10个错误码） |
+| **错误码** | ✅ 完成 | ErrorCode 枚举（9个错误码） |
 | **Result 类** | ✅ 完成 | 通用返回值类 |
 | **数据模型** | ✅ 完成 | PhoneLocation、CarrierType |
 | **Service 接口** | ✅ 声明 | 接口已定义，实现待填充 |
@@ -318,7 +317,11 @@ http_status = result.to_http_status()  # 200, 400, 429, 503...
 
 ---
 
-**版本**: V2.0.0  
+**版本**: V2.3.0  
 **状态**: 接口设计完成，实现待填充  
-**最后更新**: 2024-11-06
+**最后更新**: 2024-11-12  
+**变更**: 
+- V2.3.0: HTTP 状态码映射移至 ErrorCode，优化代码结构
+- V2.2.0: 重构代码，合并 ErrorType 和 ErrorCode 为单一枚举类
+- V2.1.0: 简化输入错误码，优化服务降级错误码
 

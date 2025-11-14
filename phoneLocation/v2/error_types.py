@@ -10,25 +10,15 @@
 """
 
 from enum import Enum
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True)
-class ErrorType:
-    """错误类型（包含码、描述和重试信息）
-    
-    Attributes:
-        code: 错误码（字符串常量）
-        message: 错误描述
-        retryable: 是否可重试
-    """
-    code: str
-    message: str
-    retryable: bool
 
 
 class ErrorCode(Enum):
     """通用错误码枚举
+    
+    每个错误码包含：
+    - code: 错误码字符串
+    - desc: 错误描述
+    - retryable: 是否可重试
     
     分类：
     - 输入错误（调用方问题，不可重试）
@@ -38,105 +28,129 @@ class ErrorCode(Enum):
     - 服务状态错误（可重试）
     """
     
+    def __init__(self, code: str, desc: str, retryable: bool):
+        """初始化错误码
+        
+        Args:
+            code: 错误码字符串常量
+            desc: 错误描述
+            retryable: 是否可重试
+        """
+        self._code = code
+        self._desc = desc
+        self._retryable = retryable
+    
     # ==================== 输入错误（调用方问题，不可重试）====================
     
-    INVALID_INPUT = ErrorType(
-        code="INVALID_INPUT",
-        message="输入参数不合法",
-        retryable=False
+    INVALID_PARAMETER = (
+        "INVALID_PARAMETER",
+        "参数不合法（包括格式错误、类型错误、值不合理等）",
+        False
     )
     
-    VALIDATION_FAILED = ErrorType(
-        code="VALIDATION_FAILED",
-        message="参数校验失败",
-        retryable=False
-    )
-    
-    MISSING_REQUIRED = ErrorType(
-        code="MISSING_REQUIRED",
-        message="缺少必需参数",
-        retryable=False
+    MISSING_PARAMETER = (
+        "MISSING_PARAMETER",
+        "缺少必需参数",
+        False
     )
     
     # ==================== 认证授权错误（不可重试）====================
     
-    AUTH_FAILED = ErrorType(
-        code="AUTH_FAILED",
-        message="认证失败",
-        retryable=False
+    AUTH_FAILED = (
+        "AUTH_FAILED",
+        "认证失败",
+        False
     )
     
-    PERMISSION_DENIED = ErrorType(
-        code="PERMISSION_DENIED",
-        message="权限不足",
-        retryable=False
+    PERMISSION_DENIED = (
+        "PERMISSION_DENIED",
+        "权限不足",
+        False
     )
     
-    CREDENTIALS_INVALID = ErrorType(
-        code="CREDENTIALS_INVALID",
-        message="凭证无效",
-        retryable=False
+    CREDENTIALS_INVALID = (
+        "CREDENTIALS_INVALID",
+        "凭证无效",
+        False
     )
     
     # ==================== 资源限制错误（可重试）====================
     
-    RATE_LIMITED = ErrorType(
-        code="RATE_LIMITED",
-        message="请求频率超限",
-        retryable=True
+    RATE_LIMITED = (
+        "RATE_LIMITED",
+        "请求频率超限",
+        True
     )
     
-    QUOTA_EXCEEDED = ErrorType(
-        code="QUOTA_EXCEEDED",
-        message="配额耗尽",
-        retryable=True
+    QUOTA_EXCEEDED = (
+        "QUOTA_EXCEEDED",
+        "配额耗尽",
+        True
     )
     
     # ==================== 超时错误（可重试）====================
     
-    TIMEOUT = ErrorType(
-        code="TIMEOUT",
-        message="请求超时",
-        retryable=True
+    TIMEOUT = (
+        "TIMEOUT",
+        "请求超时",
+        True
     )
     
     # ==================== 服务状态错误（可重试）====================
     
-    SERVICE_UNAVAILABLE = ErrorType(
-        code="SERVICE_UNAVAILABLE",
-        message="服务不可用",
-        retryable=True
+    SERVICE_UNAVAILABLE = (
+        "SERVICE_UNAVAILABLE",
+        "服务不可用",
+        True
     )
     
-    SERVICE_DEGRADED = ErrorType(
-        code="SERVICE_DEGRADED",
-        message="服务降级，既效果会差些或者部分字段缺失，调用端自己识别结果是否可用",
-        retryable=True
+    PARTIAL_FAILURE = (
+        "PARTIAL_FAILURE",
+        "部分功能降级，无法返回完整数据，调用端自己判断结果是否可用",
+        True
     )
     
-    def is_retryable(self) -> bool:
-        """判断该错误是否可重试
-        
-        Returns:
-            bool: True 表示可以重试，False 表示不应重试
-        """
-        return self.value.retryable
+    # ==================== 属性访问 ====================
     
-    def get_code(self) -> str:
-        """获取错误码字符串
-        
-        Returns:
-            str: 错误码
-        """
-        return self.value.code
+    @property
+    def code(self) -> str:
+        """错误码字符串"""
+        return self._code
     
-    def get_message(self) -> str:
-        """获取错误描述
+    @property
+    def desc(self) -> str:
+        """错误描述"""
+        return self._desc
+    
+    @property
+    def retryable(self) -> bool:
+        """是否可重试"""
+        return self._retryable
+    
+    # ==================== 方法 ====================
+    
+    def to_http_status(self) -> int:
+        """转换为 HTTP 状态码（仅用于 HTTP 接口）
         
         Returns:
-            str: 错误描述
+            int: HTTP 状态码
         """
-        return self.value.message
+        # HTTP 状态码映射表
+        mapping = {
+            ErrorCode.INVALID_PARAMETER: 400,
+            ErrorCode.MISSING_PARAMETER: 400,
+            ErrorCode.AUTH_FAILED: 401,
+            ErrorCode.CREDENTIALS_INVALID: 401,
+            ErrorCode.PERMISSION_DENIED: 403,
+            ErrorCode.RATE_LIMITED: 429,
+            ErrorCode.QUOTA_EXCEEDED: 429,
+            ErrorCode.TIMEOUT: 504,
+            ErrorCode.SERVICE_UNAVAILABLE: 503,
+            ErrorCode.PARTIAL_FAILURE: 206,
+        }
+        return mapping.get(self, 500)
+    
+    # ==================== 类方法 ====================
     
     @classmethod
     def from_code(cls, code: str) -> 'ErrorCode':
@@ -152,7 +166,7 @@ class ErrorCode(Enum):
             ValueError: 如果找不到对应的错误码
         """
         for error in cls:
-            if error.value.code == code:
+            if error.code == code:
                 return error
         raise ValueError(f"Unknown error code: {code}")
 
@@ -165,7 +179,7 @@ def get_all_retryable_errors() -> list[ErrorCode]:
     Returns:
         list[ErrorCode]: 可重试的错误码列表
     """
-    return [error for error in ErrorCode if error.is_retryable()]
+    return [error for error in ErrorCode if error.retryable]
 
 
 def get_all_non_retryable_errors() -> list[ErrorCode]:
@@ -174,7 +188,7 @@ def get_all_non_retryable_errors() -> list[ErrorCode]:
     Returns:
         list[ErrorCode]: 不可重试的错误码列表
     """
-    return [error for error in ErrorCode if not error.is_retryable()]
+    return [error for error in ErrorCode if not error.retryable]
 
 
 def get_input_errors() -> list[ErrorCode]:
@@ -184,9 +198,8 @@ def get_input_errors() -> list[ErrorCode]:
         list[ErrorCode]: 输入错误列表
     """
     return [
-        ErrorCode.INVALID_INPUT,
-        ErrorCode.VALIDATION_FAILED,
-        ErrorCode.MISSING_REQUIRED,
+        ErrorCode.INVALID_PARAMETER,
+        ErrorCode.MISSING_PARAMETER,
     ]
 
 
@@ -234,6 +247,6 @@ def get_service_errors() -> list[ErrorCode]:
     """
     return [
         ErrorCode.SERVICE_UNAVAILABLE,
-        ErrorCode.SERVICE_DEGRADED,
+        ErrorCode.PARTIAL_FAILURE,
     ]
 
